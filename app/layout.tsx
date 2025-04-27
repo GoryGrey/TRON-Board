@@ -10,8 +10,12 @@ import Footer from "@/components/footer"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "TRON Board - TRON Community Forum",
-  description: "A community forum for TRON blockchain enthusiasts",
+  title: "TRON Board",
+  description: "TRON-first crypto message board for alpha, bounties, and on-chain predictions.",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-icon.png",
+  },
     generator: 'v0.dev'
 }
 
