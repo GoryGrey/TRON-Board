@@ -62,7 +62,7 @@ export default function Footer() {
             </h3>
             <div className="flex space-x-4">
               <Link
-                href="https://github.com"
+                href="https://github.com/GoryGrey/TRON-Board"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors duration-200"
