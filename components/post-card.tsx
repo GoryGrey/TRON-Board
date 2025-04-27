@@ -7,7 +7,7 @@ import Link from "next/link"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { formatDistanceToNow } from "date-fns"
-import { MessageSquare, ThumbsUp, Eye, Share2 } from "lucide-react"
+import { MessageSquare, ThumbsUp, ThumbsDown, Eye, Share2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/contexts/auth-context"
 import { sharePostToFeed } from "@/app/actions/feed-actions"
@@ -23,6 +23,7 @@ interface PostCardProps {
     board_id: string
     view_count: number
     like_count: number
+    dislike_count?: number
     comment_count: number
     users?: {
       username: string
@@ -130,6 +131,10 @@ export default function PostCard({ post, isLoggedIn = false, postNumber, showSha
               <div className="flex items-center gap-1">
                 <ThumbsUp className="h-3 w-3" />
                 <span>{post.like_count}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <ThumbsDown className="h-3 w-3" />
+                <span>{post.dislike_count || 0}</span>
               </div>
               <div className="flex items-center gap-1">
                 <MessageSquare className="h-3 w-3" />

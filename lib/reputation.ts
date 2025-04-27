@@ -1,4 +1,4 @@
-// Reputation system for Yī Bāng (威望值 - Prestige Value)
+// Reputation system for TRON Board (威望值 - Prestige Value)
 
 export interface PrestigeRank {
   minScore: number
@@ -78,7 +78,7 @@ export const prestigeRanks: PrestigeRank[] = [
     minScore: 1000,
     title: {
       chinese: "宗师",
-      english: "Grandmaster of Yī Bāng",
+      english: "Grandmaster of TRON Board",
     },
     color: "text-red-500",
     perks: ["Red username", "Leaderboard fame"],
@@ -87,7 +87,7 @@ export const prestigeRanks: PrestigeRank[] = [
     minScore: -1, // Special case for admins
     title: {
       chinese: "管理员",
-      english: "Yī Bāng Court Official",
+      english: "TRON Board Court Official",
     },
     color: "text-amber-500",
     isAdmin: true,

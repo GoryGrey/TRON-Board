@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Flag, Share2, Heart, MessageSquare, Bookmark } from "lucide-react"
+import { ArrowLeft, Flag, Share2, Heart, MessageSquare, Bookmark, ThumbsDown } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
@@ -16,7 +16,8 @@ import AsciiArt from "@/components/ascii-art"
 import { cn } from "@/lib/utils"
 import { getPostById } from "@/lib/db/posts"
 import { getCommentsByPostId } from "@/lib/db/comments"
-import { likePost, hasUserLikedPost } from "@/app/actions/post-actions"
+import { likePost, dislikePost, hasUserLikedPost, hasUserDislikedPost } from "@/app/actions/post-actions"
+import { sharePostToFeed } from "@/app/actions/feed-actions"
 
 export default function PostPage() {
   const params = useParams()
@@ -27,8 +28,11 @@ export default function PostPage() {
   const [postComments, setPostComments] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [hasLiked, setHasLiked] = useState(false)
+  const [hasDisliked, setHasDisliked] = useState(false)
   const [hasBookmarked, setHasBookmarked] = useState(false)
   const [likeCount, setLikeCount] = useState(0)
+  const [dislikeCount, setDislikeCount] = useState(0)
+  const [isSharing, setIsSharing] = useState(false)
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -42,15 +46,19 @@ export default function PostPage() {
         if (postData) {
           setPost(postData)
           setLikeCount(postData.like_count || 0)
+          setDislikeCount(postData.dislike_count || 0)
 
           // Fetch comments for this post
           const commentsData = await getCommentsByPostId(postData.id)
           setPostComments(commentsData)
 
-          // Check if user has liked this post
+          // Check if user has liked/disliked this post
           if (isAuthenticated && user) {
             const liked = await hasUserLikedPost(postData.id, user.id)
             setHasLiked(liked)
+
+            const disliked = await hasUserDislikedPost(postData.id, user.id)
+            setHasDisliked(disliked)
           }
         } else {
           // Post not found
@@ -90,6 +98,11 @@ export default function PostPage() {
     if (!user || !post) return
 
     try {
+      // If user has disliked, remove the dislike first
+      if (hasDisliked) {
+        await handleDislike()
+      }
+
       const result = await likePost(post.id, user.id)
       setLikeCount(result.likeCount)
       setHasLiked(result.liked)
@@ -106,6 +119,45 @@ export default function PostPage() {
       toast({
         title: "Error",
         description: "Failed to like post. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleDislike = async () => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Login Required",
+        description: "Please log in to dislike posts",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!user || !post) return
+
+    try {
+      // If user has liked, remove the like first
+      if (hasLiked) {
+        await handleLike()
+      }
+
+      const result = await dislikePost(post.id, user.id)
+      setDislikeCount(result.dislikeCount)
+      setHasDisliked(result.disliked)
+
+      // Update prestige score - negative impact for disliking
+      updatePrestigeScore("POST_FLAGGED", result.disliked ? 1 : -1)
+
+      toast({
+        title: result.disliked ? "Post Disliked" : "Dislike Removed",
+        description: result.disliked ? "You've disliked this post" : "You've removed your dislike from this post",
+      })
+    } catch (error) {
+      console.error("Error disliking post:", error)
+      toast({
+        title: "Error",
+        description: "Failed to dislike post. Please try again.",
         variant: "destructive",
       })
     }
@@ -130,24 +182,40 @@ export default function PostPage() {
     })
   }
 
-  const handleShare = () => {
-    const postUrl = window.location.href
-    navigator.clipboard
-      .writeText(postUrl)
-      .then(() => {
-        toast({
-          title: "Link Copied",
-          description: "Post link copied to clipboard",
-        })
+  const handleShare = async () => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Login Required",
+        description: "Please log in to share posts",
+        variant: "destructive",
       })
-      .catch((err) => {
-        console.error("Failed to copy: ", err)
-        toast({
-          title: "Copy Failed",
-          description: "Could not copy link to clipboard",
-          variant: "destructive",
-        })
+      return
+    }
+
+    if (!user || !post) return
+
+    setIsSharing(true)
+
+    try {
+      const result = await sharePostToFeed(user.id, post.id)
+
+      toast({
+        title: "Post Shared",
+        description: result.message || "Post has been shared to your feed",
       })
+
+      // Update prestige for sharing content
+      updatePrestigeScore("CREATE_POST", 1)
+    } catch (error) {
+      console.error("Error sharing post:", error)
+      toast({
+        title: "Share Failed",
+        description: "There was an error sharing this post",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSharing(false)
+    }
   }
 
   const handleReport = () => {
@@ -315,6 +383,17 @@ export default function PostPage() {
           </button>
 
           <button
+            onClick={handleDislike}
+            className={cn(
+              "flex items-center gap-1 text-sm transition-colors duration-200 pixel-text",
+              hasDisliked ? "text-destructive glow-text" : "text-muted-foreground hover:text-destructive",
+            )}
+          >
+            <ThumbsDown className={cn("h-5 w-5", hasDisliked && "fill-destructive")} />
+            <span>{dislikeCount}</span>
+          </button>
+
+          <button
             onClick={handleBookmark}
             className={cn(
               "flex items-center gap-1 text-sm transition-colors duration-200 pixel-text",
@@ -327,10 +406,11 @@ export default function PostPage() {
 
           <button
             onClick={handleShare}
+            disabled={isSharing}
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors duration-200 pixel-text"
           >
             <Share2 className="h-5 w-5" />
-            <span>Share</span>
+            <span>{isSharing ? "Sharing..." : "Share"}</span>
           </button>
 
           <button

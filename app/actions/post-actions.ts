@@ -423,6 +423,78 @@ export async function likePost(postId: string, userId: string) {
   return { liked: true, likeCount: await getPostLikeCount(postId) }
 }
 
+// Dislike a post
+export async function dislikePost(postId: string, userId: string) {
+  const supabase = getSupabaseClient()
+
+  // Check if the user has already disliked the post
+  const { data: existingDislike, error: dislikeCheckError } = await supabase
+    .from("post_dislikes")
+    .select()
+    .eq("post_id", postId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (dislikeCheckError) {
+    console.error("Error checking post dislike:", dislikeCheckError)
+    throw new Error(`Failed to check post dislike: ${dislikeCheckError.message}`)
+  }
+
+  // If the user has already disliked the post, remove the dislike
+  if (existingDislike) {
+    const { error: undislikeError } = await supabase
+      .from("post_dislikes")
+      .delete()
+      .eq("post_id", postId)
+      .eq("user_id", userId)
+
+    if (undislikeError) {
+      console.error("Error removing post dislike:", undislikeError)
+      throw new Error(`Failed to remove post dislike: ${undislikeError.message}`)
+    }
+
+    // Decrement the dislike count if the column exists
+    try {
+      const { error: updateError } = await supabase.rpc("decrement_post_dislikes", { post_id: postId })
+      if (updateError) throw updateError
+    } catch (error) {
+      console.error("Error decrementing post dislikes (column may not exist):", error)
+      // Continue despite error
+    }
+
+    // Revalidate the post page
+    revalidatePath(`/posts/${postId}`)
+
+    return { disliked: false, dislikeCount: await getPostDislikeCount(postId) }
+  }
+
+  // If the user hasn't disliked the post, add a dislike
+  const { error: dislikeError } = await supabase.from("post_dislikes").insert({
+    post_id: postId,
+    user_id: userId,
+    created_at: new Date().toISOString(),
+  })
+
+  if (dislikeError) {
+    console.error("Error adding post dislike:", dislikeError)
+    throw new Error(`Failed to add post dislike: ${dislikeError.message}`)
+  }
+
+  // Increment the dislike count if the column exists
+  try {
+    const { error: updateError } = await supabase.rpc("increment_post_dislikes", { post_id: postId })
+    if (updateError) throw updateError
+  } catch (error) {
+    console.error("Error incrementing post dislikes (column may not exist):", error)
+    // Continue despite error
+  }
+
+  // Revalidate the post page
+  revalidatePath(`/posts/${postId}`)
+
+  return { disliked: true, dislikeCount: await getPostDislikeCount(postId) }
+}
+
 // Get post like count
 async function getPostLikeCount(postId: string) {
   const supabase = getSupabaseClient()
@@ -452,6 +524,35 @@ async function getPostLikeCount(postId: string) {
   }
 }
 
+// Get post dislike count
+async function getPostDislikeCount(postId: string) {
+  const supabase = getSupabaseClient()
+
+  try {
+    // Try to get the dislike_count from the posts table
+    const { data, error } = await supabase.from("posts").select("dislike_count").eq("id", postId).single()
+
+    if (error) throw error
+
+    return data.dislike_count || 0
+  } catch (error) {
+    // If the column doesn't exist, count the dislikes manually
+    console.error("Error fetching post dislike count (column may not exist):", error)
+
+    const { count, error: countError } = await supabase
+      .from("post_dislikes")
+      .select("*", { count: "exact", head: true })
+      .eq("post_id", postId)
+
+    if (countError) {
+      console.error("Error counting post dislikes:", countError)
+      return 0
+    }
+
+    return count || 0
+  }
+}
+
 // Check if a user has liked a post
 export async function hasUserLikedPost(postId: string, userId: string) {
   const supabase = getSupabaseClient()
@@ -466,6 +567,25 @@ export async function hasUserLikedPost(postId: string, userId: string) {
   if (error) {
     console.error("Error checking post like:", error)
     throw new Error(`Failed to check post like: ${error.message}`)
+  }
+
+  return !!data
+}
+
+// Check if a user has disliked a post
+export async function hasUserDislikedPost(postId: string, userId: string) {
+  const supabase = getSupabaseClient()
+
+  const { data, error } = await supabase
+    .from("post_dislikes")
+    .select()
+    .eq("post_id", postId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (error) {
+    console.error("Error checking post dislike:", error)
+    throw new Error(`Failed to check post dislike: ${error.message}`)
   }
 
   return !!data
